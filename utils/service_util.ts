@@ -13,8 +13,43 @@ export class ServiceUtil {
     this.init();
   }
 
-  register() {
+  async register( byPass = false) {
+    const all = this.args.all;
+   if(!all && !byPass) return
+    const serviceRegisterFilePath = `${this.projectPath}/utils/service_utils.dart`;
+    let serviceRegister = await Deno.readTextFile(serviceRegisterFilePath);
+    const matchLastModule = /(  static final (.*) = "(.*)";\n\})/;
+    const matchLastRegistry = /(  Module\.(.*): (\w*),\n\};)/;
+    const matchLastImport = /(import '.*';\n\n)/;
+    
+    const servicesDirPath = `${this.projectPath}/services`;
 
+    for await (const dirEntry of Deno.readDir(servicesDirPath)) {
+      if (dirEntry.isFile) {
+        const fileName = dirEntry.name;
+        let serviceName = fileName.split(".")[0].split("_").map((value, index) =>
+          (index == 0) ? value : ld.capitalize(value)
+        ).join("");
+        
+        //console.log(`TEST ${serviceName}`)
+
+        if(!serviceRegister.includes(serviceName)){
+          
+          serviceName = this._splitServiceName(serviceName)
+          const moduleName = this._getModuleName(serviceName)
+          const instanceName = this._getInstanceName(serviceName)
+          const fileName = this._getFileName(serviceName)
+          if(serviceName.includes("free")) console.log("TESR "+serviceName+ " "+ moduleName+" "+instanceName +" "+serviceName.endsWith(" "))
+          //console.log(`Matcher  ${serviceRegister.match(matchLastModule)?.at(1)}`)
+          serviceRegister = serviceRegister.replace(matchLastModule, `  static final ${moduleName} = "${moduleName}";\n$1`)
+          serviceRegister = serviceRegister.replace(matchLastRegistry, `  Module.${moduleName}: ${instanceName},\n$1`)
+          serviceRegister = serviceRegister.replace(matchLastImport, `import 'package:solutech_sat/services/${fileName}';\n$1`)
+        }
+      }
+    }
+    await Deno.writeTextFile(serviceRegisterFilePath, serviceRegister)
+    //console.log(serviceRegister)
+    //console.log(serviceRegister.match(matchLastRegistry))
   }
 
   async show() {
@@ -26,6 +61,7 @@ export class ServiceUtil {
       isManager ? "helpers" : "services"
     }`;
     const serviceUtilFilePath = `${this.projectPath}/utils/service_utils.dart`;
+
     for await (const dirEntry of Deno.readDir(servicesDirPath)) {
       if (dirEntry.isFile) {
         const fileName = dirEntry.name;
@@ -71,6 +107,7 @@ export class ServiceUtil {
     serviceName = serviceName?.toLowerCase()
     serviceName = serviceName?.endsWith("service")? serviceName.replace(new RegExp("service" + '$'), ""): serviceName
     serviceName = serviceName?.replace( /_/g, "" );
+    serviceName = serviceName.trim()
     return serviceName
   }
 
@@ -90,9 +127,17 @@ export class ServiceUtil {
   _getInstanceName(serviceName: any){
     serviceName = serviceName?.trim()
     serviceName = ld.startCase(ld.toLower(serviceName))
-    serviceName = serviceName.replace(" ", "")
+    serviceName = serviceName.replaceAll(" ", "")
     serviceName = serviceName.replace(/./, (a: any)=> a.toLowerCase())
     return serviceName+"Service"
+  }
+
+  _getModuleName(serviceName: any){
+    serviceName = serviceName?.trim()
+    serviceName = ld.startCase(ld.toLower(serviceName))
+    serviceName = serviceName.replaceAll(" ", "")
+    serviceName = serviceName.replace(/./, (a: any)=> a.toLowerCase())
+    return serviceName
   }
 
 
@@ -112,32 +157,33 @@ export class ServiceUtil {
       serviceName = await prompt('Enter service name: ');
     } else {
       serviceName = this.args._[2].toString();
-      const { shouldCreate } = await ask.input({
-        name: "shouldCreate",
-        message: `Create service ${serviceName}? (Y/N)`,
-        type:"confirm"
-      });
-      
-      if(shouldCreate?.toString().toLowerCase() != "y") {
-        return
-      }
     }
 
     serviceName = this._splitServiceName(serviceName)
     const fileName = this._getFileName(serviceName)
     const className = this._getClassName(serviceName)
     const instanceName = this._getInstanceName(serviceName)
+    const { shouldCreate } = await ask.input({
+      name: "shouldCreate",
+      message: `Create service ${className}? (Y/N)`,
+      type:"confirm"
+    });
+    
+    if(shouldCreate?.toString().toLowerCase() != "y") {
+      return
+    }
+
     const template: string = await this._getFileTemplate(className, instanceName)
     await Deno.writeTextFile(`${this.projectPath}/services/${fileName}`, template)
+    await this.register(true)
+    console.log(" ")
+    console.log("Created and Registered")
     console.log(`FileName: ${fileName}, Class: ${className}, Instance: ${instanceName}`)
   }
 
   init() {
-    if (this.args._.includes("services") || this.args._.includes("manager")) {
-      return;
-    }
-    if (ld.first(this.args._) == "register") this.register();
-    if (ld.first(this.args._) == "show") this.show();
-    if (ld.first(this.args._) == "create") this.create();
+    if (ld.first(this.args._) == "register" && this.args._.includes("services")) this.register();
+    if (ld.first(this.args._) == "show" && (this.args._.includes("services") || this.args._.includes("manager"))) this.show();
+    if (ld.first(this.args._) == "create" && this.args._.includes("service")) this.create();
   }
 }
