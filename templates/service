@@ -1,0 +1,14 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:solutech_sat/api/api.dart';
+import 'package:solutech_sat/data/database.dart';
+import 'package:solutech_sat/tools/manager.dart';
+
+class _$Service extends Service {
+  
+  Future sync() async {
+  }
+}
+
+var _$$Service = _$Service();
